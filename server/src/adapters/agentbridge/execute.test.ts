@@ -104,4 +104,44 @@ describe("agentbridge adapter execute", () => {
     expect(result.errorCode).toBe("timeout");
     expect(result.errorMessage).toContain("timed out after 1ms");
   });
+
+  it("reports a cancelled run when the operator signal aborts", async () => {
+    const runController = new AbortController();
+    guardedFetchMock.mockImplementation(
+      (_url: string, init?: RequestInit) => {
+        // Simulate the operator stopping the run shortly after the request starts.
+        setTimeout(() => runController.abort(), 5);
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+      },
+    );
+
+    const result = await execute(
+      baseCtx({
+        config: { url: "http://localhost:5290" },
+        signal: runController.signal,
+      }),
+    );
+
+    expect(result.timedOut).toBe(false);
+    expect(result.errorCode).toBe("cancelled");
+  });
+
+  it("treats an empty assistant reply as a failure", async () => {
+    guardedFetchMock.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ choices: [], usage: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    const result = await execute(baseCtx());
+
+    expect(result.exitCode).toBe(1);
+    expect(result.errorCode).toBe("empty_response");
+  });
 });

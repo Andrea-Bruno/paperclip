@@ -13,11 +13,16 @@ export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
 ): Promise<AdapterEnvironmentTestResult> {
   const baseUrl = asString(ctx.config.url, "http://localhost:5290").replace(/\/+$/, "");
+  const apiKey = asString(ctx.config.apiKey, "");
+  const headers: Record<string, string> = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
   const checks: AdapterEnvironmentCheck[] = [];
   let status: AdapterEnvironmentTestResult["status"] = "pass";
 
   try {
-    const res = await guardedHttpAdapterFetch(`${baseUrl}/health`, { method: "GET" });
+    const res = await guardedHttpAdapterFetch(`${baseUrl}/health`, {
+      method: "GET",
+      headers,
+    });
     if (res.ok) {
       checks.push({
         code: "health_ok",
@@ -45,7 +50,10 @@ export async function testEnvironment(
 
   if (status !== "fail") {
     try {
-      const res = await guardedHttpAdapterFetch(`${baseUrl}/v1/models`, { method: "GET" });
+      const res = await guardedHttpAdapterFetch(`${baseUrl}/v1/models`, {
+        method: "GET",
+        headers,
+      });
       if (res.ok) {
         checks.push({
           code: "models_ok",
