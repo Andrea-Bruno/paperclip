@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { decodeInventory } from "../scripts/lib/capability-inventory.mjs";
 import { validateRows } from "../scripts/generate-capability-contract.mjs";
 
+const run = promisify(execFile);
+const scriptPath = resolve(import.meta.dirname, "../scripts/generate-capability-contract.mjs");
 const phaseDirectory = resolve(import.meta.dirname, "../generated/capability");
 
 async function readRows(file) {
@@ -42,7 +46,6 @@ test("contract validation rejects missing, duplicate, and unclassified entries",
   assert.throws(() => validateRows([{ ...row, primaryDisposition: "unclassified" }], "fixture"), /valid primary disposition/);
 });
 
-
 test("conversational answer guidance has the same agent-operation classification in both inventories", async () => {
   const generated = (await readRows("capabilities.yaml")).filter(row => row.heading === "Conversational confirmation answers");
   const spec = decodeInventory(await readFile(resolve(import.meta.dirname, "../spec/capability/capabilities.yaml"), "utf8")).rows
@@ -63,4 +66,13 @@ test("both capability inventories cover every declared skill source", async () =
     assert.ok(normative.rows.some(row => row.sourceAnchor.startsWith(`${source}:`)), `Missing normative source ${source}`);
   }
   assert.equal(normative.rows.filter(row => row.sourceAnchor.startsWith("skills/paperclip/references/issue-documents.md:")).length, 3);
+});
+
+test("entry-point guard runs the check when the script is invoked directly", async () => {
+  // Regression: on a Windows checkout the old guard compared a raw path with a
+  // file URL, so it was false and the script exited without running the drift
+  // check. Invoking the script as a child process with --check must run the check
+  // against the committed files and exit cleanly (execFile rejects on non-zero).
+  const { stderr } = await run(process.execPath, [scriptPath, "--check"]);
+  assert.equal(stderr, "");
 });
