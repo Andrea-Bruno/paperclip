@@ -88,6 +88,46 @@ describe("agentbridge adapter execute", () => {
     expect(guardedFetchMock).toHaveBeenCalledOnce();
   });
 
+  it("forwards the run-scoped connection tools in the request body", async () => {
+    const runtimeTools = {
+      version: 1,
+      guidance: "use the connection tools",
+      mcpEndpoint: "https://paperclip.test/mcp/runtime-tools",
+      rest: {
+        connectionsSearch: "https://paperclip.test/connections/search",
+        connectionRequest: "https://paperclip.test/connections/request",
+      },
+      bearerToken: "run-token",
+      expiresAt: "2026-01-01T00:00:00Z",
+      tools: ["connections_search", "connection_request"] as const,
+    };
+    guardedFetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.paperclipRuntimeTools).toEqual(runtimeTools);
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: {} }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    await execute(baseCtx({ runtimeTools }));
+    expect(guardedFetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("omits paperclipRuntimeTools when the run has none", async () => {
+    guardedFetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect("paperclipRuntimeTools" in body).toBe(false);
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: {} }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    await execute(baseCtx());
+    expect(guardedFetchMock).toHaveBeenCalledOnce();
+  });
+
   it("reports a configured request timeout as timed_out", async () => {
     guardedFetchMock.mockImplementation(
       (_url: string, init?: RequestInit) =>

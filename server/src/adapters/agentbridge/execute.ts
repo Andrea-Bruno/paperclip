@@ -56,6 +56,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   };
   if (sessionId) body.session_id = sessionId;
   if (llmProvider) body.llm_provider = llmProvider;
+  // invocation_context delivery: forward the run-scoped connection tools
+  // (endpoint + token) in the request body, matching the generic HTTP adapter.
+  if (ctx.runtimeTools) body.paperclipRuntimeTools = ctx.runtimeTools;
 
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
