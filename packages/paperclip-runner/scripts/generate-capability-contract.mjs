@@ -206,7 +206,7 @@ export async function main() {
   }
 }
 
-if (pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   main().catch((error) => {
     console.error(error.message);
     process.exitCode = 1;

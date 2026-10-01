@@ -4,6 +4,7 @@ import test from "node:test";
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { pathToFileURL } from "node:url";
 import { validateRows } from "../scripts/generate-capability-contract.mjs";
 
 const run = promisify(execFile);
@@ -51,4 +52,18 @@ test("entry-point guard runs the check when the script is invoked directly", asy
   // against the committed files and exit cleanly (execFile rejects on non-zero).
   const { stderr } = await run(process.execPath, [scriptPath, "--check"]);
   assert.equal(stderr, "");
+});
+
+test("module imports without a script path (node --eval / stdin)", async () => {
+  // Regression: with no process.argv[1] the old guard called pathToFileURL on
+  // undefined and threw before the caller could use the exports. Importing the
+  // module from a context with no script argument must succeed and expose the
+  // exported helpers.
+  const href = pathToFileURL(scriptPath).href;
+  const evalScript =
+    `import(${JSON.stringify(href)}).then((m) => { ` +
+    `m.validateRows([{ id: 'x:1', sourceAnchor: 'a.md#L1:x', primaryDisposition: 'control_plane_owned' }], 'fixture'); ` +
+    `process.stdout.write('imported'); });`;
+  const { stdout } = await run(process.execPath, ["--eval", evalScript]);
+  assert.equal(stdout, "imported");
 });
