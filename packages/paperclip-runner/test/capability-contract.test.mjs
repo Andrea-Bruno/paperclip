@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -72,10 +72,24 @@ test("both capability inventories cover every declared skill source", async () =
 test("entry-point guard runs the check when the script is invoked directly", async () => {
   // Regression: on a Windows checkout the old guard compared a raw path with a
   // file URL, so it was false and the script exited without running the drift
-  // check. Invoking the script as a child process with --check must run the check
-  // against the committed files and exit cleanly (execFile rejects on non-zero).
-  const { stderr } = await run(process.execPath, [scriptPath, "--check"]);
-  assert.equal(stderr, "");
+  // check. A clean --check produces no output, so silence alone cannot tell a
+  // passing check from a skipped one. Force drift in a generated file and assert
+  // the check actually runs and reports it: if the guard regressed to false, the
+  // script would exit 0 silently and this assertion would fail.
+  const target = resolve(phaseDirectory, "capabilities.yaml");
+  const original = await readFile(target, "utf8");
+  try {
+    await writeFile(target, `${original}\n{"drift": true}\n`);
+    await assert.rejects(
+      run(process.execPath, [scriptPath, "--check"]),
+      (err) => {
+        assert.match(`${err.stderr}${err.stdout}`, /drift/i);
+        return true;
+      },
+    );
+  } finally {
+    await writeFile(target, original);
+  }
 });
 
 test("module imports without a script path (node --eval / stdin)", async () => {
