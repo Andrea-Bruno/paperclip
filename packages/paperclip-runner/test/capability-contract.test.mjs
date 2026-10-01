@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { validateRows } from "../scripts/generate-capability-contract.mjs";
 
+const run = promisify(execFile);
+const scriptPath = resolve(import.meta.dirname, "../scripts/generate-capability-contract.mjs");
 const phaseDirectory = resolve(import.meta.dirname, "../generated/capability");
 
 async function readRows(file) {
@@ -38,4 +42,13 @@ test("contract validation rejects missing, duplicate, and unclassified entries",
   assert.throws(() => validateRows([{ ...row, sourceAnchor: "" }], "fixture"), /source anchor/);
   assert.throws(() => validateRows([row, { ...row, id: "example:2" }], "fixture"), /duplicate source anchor/);
   assert.throws(() => validateRows([{ ...row, primaryDisposition: "unclassified" }], "fixture"), /valid primary disposition/);
+});
+
+test("entry-point guard runs the check when the script is invoked directly", async () => {
+  // Regression: on a Windows checkout the old guard compared a raw path with a
+  // file URL, so it was false and the script exited without running the drift
+  // check. Invoking the script as a child process with --check must run the check
+  // against the committed files and exit cleanly (execFile rejects on non-zero).
+  const { stderr } = await run(process.execPath, [scriptPath, "--check"]);
+  assert.equal(stderr, "");
 });
